@@ -1,0 +1,25 @@
+# Dependencies — recreated by `npm install`
+node_modules/
+
+# Generated from tailwind.css by `npm run build:css` (runs on install/start)
+styles.css
+
+# Build output
+dist/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local tool settings
+.claude/
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Personal notes
+GITHUB_STEPS.txt

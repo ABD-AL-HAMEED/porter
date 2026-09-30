@@ -1,0 +1,8 @@
+@import "tailwindcss" source(none);
+@source "./index.html";
+@source "./renderer";
+
+@theme {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+}

@@ -1,0 +1,33 @@
+{
+  "name": "porter",
+  "productName": "Porter",
+  "version": "1.0.0",
+  "description": "Live USB topology and Device Manager-style hardware viewer for Windows",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "npm run build:css && electron .",
+    "build:css": "tailwindcss -i ./tailwind.css -o ./styles.css --minify",
+    "rebuild": "electron-rebuild -f -w usb-detection",
+    "postinstall": "install-electron && npm run build:css && (electron-rebuild -f -w usb-detection || exit 0)"
+  },
+  "optionalDependencies": {
+    "usb-detection": "^4.14.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@tailwindcss/cli": "^4.3.3",
+    "electron": "^44.4.5",
+    "tailwindcss": "^4.3.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "os": [
+    "win32"
+  ],
+  "dependencies": {
+    "d3": "^7.9.0"
+  }
+}

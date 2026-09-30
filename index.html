@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Porter</title>
+
+  <!-- styles.css is compiled from tailwind.css by `npm run build:css` (runs automatically on install/start). -->
+  <link rel="stylesheet" href="styles.css">
+  <script src="node_modules/d3/dist/d3.min.js"></script>
+
+  <style>
+    html, body { background: #0f172a; }
+    #diagram svg { display: block; width: 100%; height: 100%; cursor: grab; user-select: none; }
+    #diagram svg:active { cursor: grabbing; }
+    #diagram .card { cursor: pointer; transition: fill 120ms ease, stroke 120ms ease; }
+    #diagram .node:hover .card { fill: #16233b; }
+    #diagram .node.is-ghost:hover .card { fill: #1a2335; }
+    #diagram .node.is-focus .card { stroke: #f0abfc; stroke-width: 2.5; stroke-dasharray: none; }
+    #diagram text { pointer-events: none; }
+    #tooltip { left: 0; top: 0; }
+    .kbd { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid #334155; background: #0f172a; color: #94a3b8; }
+    .scroll-thin { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+  </style>
+</head>
+
+<body class="h-full overflow-hidden bg-slate-900 font-sans text-slate-200 antialiased">
+  <div class="flex h-full flex-col">
+
+    <!-- Header -->
+    <header class="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-slate-800 px-5 py-3">
+      <div class="flex items-center gap-3">
+        <div class="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500/10 ring-1 ring-cyan-400/30">
+          <svg viewBox="0 0 24 24" class="h-5 w-5 text-cyan-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2v14"/><path d="M8 6l4-4 4 4"/><path d="M7 11v2a3 3 0 003 3h2"/><path d="M17 9v4a3 3 0 01-3 3h-2"/>
+            <rect x="5" y="9" width="4" height="2" rx=".5"/><circle cx="17" cy="8" r="1.5"/><circle cx="12" cy="19.5" r="2.5"/>
+          </svg>
+        </div>
+        <div class="leading-tight">
+          <h1 class="text-[15px] font-semibold tracking-tight text-slate-100">Porter</h1>
+          <p class="text-xs text-slate-400">Hardware topology &amp; devices</p>
+        </div>
+      </div>
+
+      <nav class="flex items-center rounded-lg bg-slate-800 p-0.5 ring-1 ring-slate-700" role="tablist" aria-label="View">
+        <button type="button" role="tab" data-view="topology" class="rounded-md px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">USB topology</button>
+        <button type="button" role="tab" data-view="devices" class="rounded-md px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Devices</button>
+      </nav>
+
+      <div class="flex items-center gap-2 text-xs">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 ring-1 ring-slate-700">
+          <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+          <span id="statA" class="font-semibold tabular-nums text-slate-100">0</span>
+          <span id="statALabel" class="text-slate-400">connected</span>
+        </span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 ring-1 ring-slate-700">
+          <span class="h-1.5 w-1.5 rounded-full border border-dashed border-slate-400"></span>
+          <span id="statB" class="font-semibold tabular-nums text-slate-100">0</span>
+          <span id="statBLabel" class="text-slate-400">remembered</span>
+        </span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 ring-1 ring-slate-700">
+          <span id="statCDot" class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+          <span id="statC" class="font-semibold tabular-nums text-slate-100">0</span>
+          <span id="statCLabel" class="text-slate-400">serial ports</span>
+        </span>
+      </div>
+
+      <div class="ml-auto flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <span class="relative flex h-2 w-2">
+            <span id="livePing" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+            <span id="liveCore" class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+          </span>
+          <span id="liveLabel">Connecting…</span>
+          <span class="text-slate-600">·</span>
+          <span id="lastScan" class="tabular-nums">Never scanned</span>
+        </div>
+
+        <div id="topologyControls" class="flex flex-wrap items-center gap-3">
+          <label class="flex cursor-pointer select-none items-center gap-2 text-xs text-slate-300">
+            <input id="toggleGhosts" type="checkbox" class="peer sr-only" checked>
+            <span class="relative h-4 w-7 rounded-full bg-slate-700 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-slate-300 after:transition-transform peer-checked:bg-cyan-600 peer-checked:after:translate-x-3 peer-focus-visible:ring-2 peer-focus-visible:ring-cyan-400"></span>
+            Show disconnected
+          </label>
+
+          <label class="flex cursor-pointer select-none items-center gap-2 text-xs text-slate-300" title="Also show every empty port, not just the ones you've named">
+            <input id="toggleAllPorts" type="checkbox" class="peer sr-only">
+            <span class="relative h-4 w-7 rounded-full bg-slate-700 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-slate-300 after:transition-transform peer-checked:bg-teal-600 peer-checked:after:translate-x-3 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-400"></span>
+            Show all ports
+          </label>
+
+          <button id="btnFindPort" type="button" title="Plug a device into (or unplug it from) a port to find and name that port"
+                  class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-teal-300 ring-1 ring-teal-500/40 hover:bg-teal-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+            Find port
+          </button>
+
+          <div class="flex items-center rounded-lg bg-slate-800 p-0.5 ring-1 ring-slate-700" role="group" aria-label="Tree direction">
+            <button type="button" data-layout="vertical" title="Top to bottom" aria-label="Top to bottom layout"
+                    class="rounded-md p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/>
+              </svg>
+            </button>
+            <button type="button" data-layout="horizontal" title="Left to right" aria-label="Left to right layout"
+                    class="rounded-md p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="9" width="4" height="6" rx="1"/><rect x="17" y="3" width="4" height="6" rx="1"/><rect x="17" y="15" width="4" height="6" rx="1"/><path d="M7 12h5M17 6h-5v12h5"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="flex items-center rounded-lg bg-slate-800 p-0.5 ring-1 ring-slate-700">
+            <button id="btnExpand" type="button" class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Expand all</button>
+            <button id="btnCollapse" type="button" class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Collapse all</button>
+            <button id="btnFit" type="button" class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Fit</button>
+          </div>
+        </div>
+
+        <button id="btnRescan" type="button"
+                class="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 disabled:cursor-wait disabled:opacity-70">
+          <svg id="rescanIcon" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/>
+          </svg>
+          <span id="rescanLabel">Force Rescan</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="min-h-0 flex-1 p-4">
+
+      <!-- ================= USB topology view ================= -->
+      <section id="viewTopology" class="relative h-full overflow-hidden rounded-xl bg-slate-800 ring-1 ring-slate-700/70">
+        <div id="diagram" class="absolute inset-0"></div>
+
+        <div id="finderBanner" role="status" class="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900/95 px-4 py-3 text-xs shadow-2xl shadow-black/50 ring-1 ring-teal-500/50 backdrop-blur-sm">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-70"></span>
+            <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-teal-400"></span>
+          </span>
+          <div>
+            <p class="font-semibold text-teal-200">Finding a port…</p>
+            <p class="text-slate-400">Plug a device into the port you want to identify — or unplug one from it.</p>
+          </div>
+          <button id="finderCancel" type="button" class="ml-2 rounded-lg px-2.5 py-1.5 text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">Cancel</button>
+        </div>
+
+        <div id="overlay" class="pointer-events-none absolute inset-0 grid place-items-center">
+          <div class="flex flex-col items-center gap-3 text-center">
+            <svg id="overlaySpinner" viewBox="0 0 24 24" class="h-7 w-7 animate-spin text-cyan-400" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".2" stroke-width="3"/>
+              <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <p id="overlayTitle" class="text-sm font-medium text-slate-200">Scanning hardware…</p>
+            <p id="overlayText" class="max-w-sm text-xs text-slate-400">Enumerating controllers, hubs, ports and devices.</p>
+          </div>
+        </div>
+
+        <div class="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-900/80 px-3 py-2 text-[11px] text-slate-400 ring-1 ring-slate-700/60 backdrop-blur-sm">
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-indigo-400"></span>Host</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>Controller / hub</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>Active device</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>Problem</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full border border-dashed border-slate-400"></span>Disconnected (last known device)</span>
+          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full border-[1.5px] border-teal-400"></span>Empty port</span>
+        </div>
+
+        <div class="pointer-events-none absolute bottom-3 right-3 hidden items-center gap-2 rounded-lg bg-slate-900/80 px-3 py-2 text-[11px] text-slate-400 ring-1 ring-slate-700/60 backdrop-blur-sm lg:flex">
+          Click a card to rename <span class="text-slate-600">·</span> right-click to name its port <span class="text-slate-600">·</span> click a dot to collapse <span class="text-slate-600">·</span> scroll to zoom <span class="text-slate-600">·</span> <span class="kbd">F5</span> rescan
+        </div>
+      </section>
+
+      <!-- ================= Devices (Device Manager) view ================= -->
+      <section id="viewDevices" class="hidden h-full min-h-0 gap-4">
+
+        <!-- Category sidebar -->
+        <aside class="scroll-thin flex w-64 shrink-0 flex-col overflow-y-auto rounded-xl bg-slate-800 p-2 ring-1 ring-slate-700/70">
+          <p class="px-2.5 pb-1.5 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">Groups</p>
+          <div id="groupList" class="flex flex-col gap-0.5"></div>
+          <p class="px-2.5 pb-1.5 pt-4 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">Device Manager categories</p>
+          <div id="categoryList" class="flex flex-col gap-0.5"></div>
+        </aside>
+
+        <!-- Table -->
+        <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-slate-800 ring-1 ring-slate-700/70">
+          <div class="flex flex-wrap items-center gap-2 border-b border-slate-700/70 px-4 py-3">
+            <div class="relative min-w-[220px] flex-1">
+              <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="devSearch" type="search" placeholder="Search name, alias, manufacturer, hardware ID…  (Ctrl+F)" autocomplete="off" spellcheck="false"
+                     class="w-full rounded-lg bg-slate-900 py-2 pl-8 pr-3 text-xs text-slate-100 placeholder:text-slate-500 ring-1 ring-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            </div>
+
+            <div class="flex items-center rounded-lg bg-slate-900 p-0.5 ring-1 ring-slate-700" role="group" aria-label="Filters">
+              <button type="button" data-filter="groupByDevice" title="Show functions (mouse, keyboard, audio …) under the physical device they belong to" class="rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Group by device</button>
+              <button type="button" data-filter="physicalOnly" title="Hide software and virtual devices" class="rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Physical only</button>
+              <button type="button" data-filter="includeDisconnected" title="Include devices Windows remembers but that are not connected" class="rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Disconnected</button>
+              <button type="button" data-filter="problemsOnly" title="Only devices with a driver or hardware problem" class="rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Problems only</button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 border-b border-slate-700/70 px-4 py-2.5">
+            <span id="adminBadge" class="hidden items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300 ring-1 ring-amber-500/30">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/></svg>
+              Administrator
+            </span>
+            <button id="btnRunAsAdmin" type="button" title="Restart Porter with administrator rights to enable, disable, uninstall and install drivers"
+                    class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 ring-1 ring-amber-500/40 hover:bg-amber-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/></svg>
+              Run as administrator
+            </button>
+            <button id="btnScanChanges" type="button" title="Device Manager's &quot;Scan for hardware changes&quot; (administrator)" class="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Scan for hardware changes</button>
+            <button id="btnAddDriver" type="button" title="Install a driver from its .inf file (administrator)" class="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Add driver…</button>
+            <div class="ml-auto flex gap-2">
+              <button id="btnExportCsv" type="button" class="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Export CSV</button>
+              <button id="btnDeviceManager" type="button" class="rounded-lg px-2.5 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Open Device Manager</button>
+            </div>
+          </div>
+
+          <div class="flex items-baseline gap-2 px-4 pb-2 pt-3">
+            <h2 id="devTitle" class="text-sm font-semibold text-slate-100">All devices</h2>
+            <span id="devCount" class="text-xs text-slate-400"></span>
+          </div>
+
+          <div class="scroll-thin min-h-0 flex-1 overflow-auto">
+            <table class="w-full border-separate border-spacing-0 text-left text-xs">
+              <thead id="devHead" class="sticky top-0 z-10 bg-slate-800"></thead>
+              <tbody id="devBody"></tbody>
+            </table>
+            <p id="devEmpty" class="hidden px-4 py-16 text-center text-xs text-slate-400">No devices match the current filters.</p>
+          </div>
+        </div>
+
+        <!-- Drag to resize the detail panel (double-click resets) -->
+        <div id="devResizer" role="separator" aria-orientation="vertical" aria-label="Resize details panel" tabindex="0"
+             title="Drag to resize · double-click to reset"
+             class="group -mx-3 hidden w-3 shrink-0 cursor-col-resize items-center justify-center focus:outline-none">
+          <span class="h-12 w-1 rounded-full bg-slate-700 transition-colors group-hover:bg-cyan-500 group-focus-visible:bg-cyan-400"></span>
+        </div>
+
+        <!-- Detail panel -->
+        <aside id="devDetail" class="scroll-thin hidden w-[360px] shrink-0 flex-col overflow-y-auto rounded-xl bg-slate-800 ring-1 ring-slate-700/70"></aside>
+      </section>
+    </main>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" role="tooltip" class="pointer-events-none fixed z-40 hidden w-[340px] rounded-xl bg-slate-900/95 p-3.5 text-xs shadow-2xl shadow-black/50 ring-1 ring-slate-700 backdrop-blur-sm"></div>
+
+  <!-- Alias dialog -->
+  <div id="aliasModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" aria-hidden="true">
+    <form id="aliasForm" role="dialog" aria-modal="true" aria-labelledby="aliasTitle"
+          class="w-[440px] max-w-full rounded-xl bg-slate-800 p-5 shadow-2xl shadow-black/60 ring-1 ring-slate-700">
+      <h2 id="aliasTitle" class="text-sm font-semibold text-slate-100">Name this device</h2>
+      <p id="aliasDeviceName" class="mt-1 truncate text-xs text-slate-400"></p>
+      <p id="aliasDeviceId" class="mt-0.5 break-all font-mono text-[10.5px] leading-snug text-slate-500"></p>
+
+      <label id="aliasLabel" for="aliasInput" class="mt-4 block text-xs font-medium text-slate-300">Alias</label>
+      <input id="aliasInput" type="text" maxlength="64" autocomplete="off" spellcheck="false"
+             placeholder="e.g. Arduino Mega — bench 2"
+             class="mt-1.5 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 ring-1 ring-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+      <p id="aliasHint" class="mt-2 text-[11px] text-slate-500"></p>
+
+      <div class="mt-5 flex items-center gap-2">
+        <button id="aliasRemove" type="button" class="rounded-lg px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400">Remove alias</button>
+        <div class="ml-auto flex gap-2">
+          <button id="aliasCancel" type="button" class="rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Cancel</button>
+          <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" aria-hidden="true">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage"
+         class="w-[460px] max-w-full rounded-xl bg-slate-800 p-5 shadow-2xl shadow-black/60 ring-1 ring-slate-700">
+      <h2 id="confirmTitle" class="text-sm font-semibold text-slate-100"></h2>
+      <p id="confirmMessage" class="mt-2 text-xs leading-relaxed text-slate-300"></p>
+      <p id="confirmWarning" class="mt-3 hidden rounded-lg bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200 ring-1 ring-amber-500/30"></p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="confirmCancel" type="button" class="rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Cancel</button>
+        <button id="confirmOk" type="button" class="rounded-lg px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="pointer-events-none fixed bottom-6 left-1/2 z-50 hidden -translate-x-1/2 rounded-lg px-4 py-2.5 text-xs font-medium shadow-xl ring-1"></div>
+
+  <script src="renderer/app.js"></script>
+  <script src="renderer/devices.js"></script>
+</body>
+</html>
