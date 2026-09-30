@@ -372,6 +372,8 @@ function createWindow() {
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     title: 'Porter',
+    // Packaged builds take the icon from the .exe; when running from source use build/icon.png.
+    ...(app.isPackaged ? {} : { icon: path.join(__dirname, 'build', 'icon.png') }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -461,7 +463,9 @@ ipcMain.handle(IPC.RELAUNCH_AS_ADMIN, async (event) => {
   // Let the elevated copy take the single-instance lock.
   app.releaseSingleInstanceLock();
   try {
-    await runPowerShell(script, { PORTER_EXE: process.execPath, PORTER_ARGS: appArgs });
+    // The portable build runs from a temporary copy that is deleted on exit; relaunch the real .exe.
+    const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+    await runPowerShell(script, { PORTER_EXE: exe, PORTER_ARGS: appArgs });
   } catch (err) {
     app.requestSingleInstanceLock();
     throw new Error(/cancel/i.test(err.message) ? 'Cancelled — administrator rights were not granted' : err.message);

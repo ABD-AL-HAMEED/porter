@@ -30,7 +30,19 @@ Everything runs locally and Porter makes no network requests. Without administra
 device information; changes are possible only after you restart it with **Run as administrator** (Windows
 asks for permission).
 
-## Requirements
+## Download
+
+Get the latest version from the **[Releases page](https://github.com/ABD-AL-HAMEED/porter/releases/latest)**:
+
+- **`Porter-Setup-x.y.z.exe`** — installer (Start menu + desktop shortcut, uninstall from Windows Settings)
+- **`Porter-x.y.z-portable.exe`** — runs without installing
+
+Porter isn't code-signed yet, so the first time you run it Windows SmartScreen may say
+*"Windows protected your PC"*. Click **More info → Run anyway**.
+
+To run it from the source code instead, follow the steps below.
+
+## Requirements (running from source)
 
 - **Windows 10 or 11** (64-bit)
 - **Node.js 22.12 or newer** (the LTS version is recommended) — this also installs **npm**

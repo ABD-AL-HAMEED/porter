@@ -6,11 +6,55 @@
   "main": "main.js",
   "private": true,
   "license": "MIT",
+  "author": "ABD-AL-HAMEED",
+  "homepage": "https://github.com/ABD-AL-HAMEED/porter",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ABD-AL-HAMEED/porter.git"
+  },
   "scripts": {
     "start": "npm run build:css && electron .",
     "build:css": "tailwindcss -i ./tailwind.css -o ./styles.css --minify",
     "rebuild": "electron-rebuild -f -w usb-detection",
+    "dist": "npm run build:css && electron-builder --win --x64 --publish never",
     "postinstall": "install-electron && npm run build:css && (electron-rebuild -f -w usb-detection || exit 0)"
+  },
+  "build": {
+    "appId": "com.porter.app",
+    "productName": "Porter",
+    "copyright": "Copyright © 2026 ABD-AL-HAMEED",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "styles.css",
+      "renderer/**/*",
+      "scripts/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Porter",
+      "artifactName": "Porter-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Porter-${version}-portable.${ext}"
+    }
   },
   "optionalDependencies": {
     "usb-detection": "^4.14.2"
@@ -19,6 +63,7 @@
     "@electron/rebuild": "^4.2.0",
     "@tailwindcss/cli": "^4.3.3",
     "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "tailwindcss": "^4.3.3"
   },
   "engines": {
